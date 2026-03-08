@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gsta
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyB7vQMWNRyFuUnitN7e3wNuQr-LmvHwjic",
+  apiKey: "AIzaSyAWTPDAm_dnjq3AtgCgaktnTUP1LmXxFu0",
   authDomain: "mydash-sync.firebaseapp.com",
   projectId: "mydash-sync",
   storageBucket: "mydash-sync.firebasestorage.app",
