@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>MyDash — Personal Dashboard</title>
     <meta name="description" content="Personal dashboard with calendar, tasks, and expense tracking.">
 
@@ -20,9 +22,11 @@
     <!-- Fonts & Styles -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <div class="app-layout">
@@ -157,7 +161,8 @@
                     </div>
 
                     <div class="task-list" id="taskList">
-                        <p class="empty-state">No tasks or events yet. Click <strong>+ Add New</strong> to get started!</p>
+                        <p class="empty-state">No tasks or events yet. Click <strong>+ Add New</strong> to get started!
+                        </p>
                     </div>
                 </div>
             </section>
@@ -193,7 +198,8 @@
                 <div class="content-card">
                     <h3 class="card-title">Recent Transactions</h3>
                     <div class="expense-list" id="expenseList">
-                        <p class="empty-state">No expenses recorded. Click <strong>+ Add Expense</strong> to start tracking!</p>
+                        <p class="empty-state">No expenses recorded. Click <strong>+ Add Expense</strong> to start
+                            tracking!</p>
                     </div>
                 </div>
             </section>
@@ -306,7 +312,8 @@
             <h2>Welcome to MyDash</h2>
             <p>Sign in to sync your tasks and expenses across all devices.</p>
             <button class="btn-google" id="btnGoogleLogin">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" class="google-icon">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G"
+                    class="google-icon">
                 Sign in with Google
             </button>
         </div>
@@ -315,4 +322,5 @@
     <!-- Firebase SDKs -->
     <script type="module" src="app.js"></script>
 </body>
+
 </html>
