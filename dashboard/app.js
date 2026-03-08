@@ -757,44 +757,22 @@ function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
-// ===== PWA SERVICE WORKER =====
+// ===== PWA SERVICE WORKER (TEMPORARILY DISABLED TO CLEAR CACHE) =====
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            const reg = await navigator.serviceWorker.register('./sw.js');
-            console.log('Service Worker registered', reg);
-            
-            // Check for updates periodically
-            setInterval(() => {
-                reg.update();
-            }, 60 * 60 * 1000); // Every hour
-            
-            // Handle updates when a new SW is waiting
-            reg.addEventListener('updatefound', () => {
-                const newWorker = reg.installing;
-                if (!newWorker) return;
-                
-                newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        // New update available, notify user to refresh
-                        if (confirm('A new version of MyDash is available! Refresh to update?')) {
-                            newWorker.postMessage({ action: 'skipWaiting' });
-                        }
-                    }
-                });
-            });
-
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+                console.log('Service Worker unregistered successfully.');
+            }
+            // Force reload one time to ensure fresh cache
+            if (!sessionStorage.getItem('sw_cleared')) {
+                sessionStorage.setItem('sw_cleared', 'true');
+                window.location.reload(true);
+            }
         } catch (err) {
-            console.error('Service Worker registration failed:', err);
-        }
-    });
-
-    // Refresh the page once the new SW takes over
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
+            console.error('Error during Service Worker cleanup:', err);
         }
     });
 }
