@@ -861,8 +861,13 @@ body {
 .expense-amount {
     font-size: 1rem;
     font-weight: 700;
-    color: var(--accent);
     font-variant-numeric: tabular-nums;
+}
+.expense-amount.income {
+    color: var(--green);
+}
+.expense-amount.expense {
+    color: var(--text-primary);
 }
 .expense-delete {
     width: 28px; height: 28px;

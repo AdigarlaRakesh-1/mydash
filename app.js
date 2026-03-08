@@ -181,7 +181,7 @@ const CATEGORY_ICONS = {
 };
 
 const EXPENSE_ICONS = {
-    food: '🍔', transport: '🚗', shopping: '🛍️', bills: '📄',
+    salary: '💰', food: '🍔', transport: '🚗', shopping: '🛍️', bills: '📄',
     entertainment: '🎬', health: '💊', education: '📚', other: '📦'
 };
 
@@ -224,7 +224,8 @@ const dom = {
     // Expenses
     addExpenseBtn:   $('#addExpenseBtn'),
     monthTotal:      $('#monthTotal'),
-    todayTotal:      $('#todayTotal'),
+    incomeTotal:     $('#incomeTotal'),
+    spentTotal:      $('#spentTotal'),
     topCategory:     $('#topCategory'),
     barChart:        $('#barChart'),
     expenseList:     $('#expenseList'),
@@ -247,6 +248,7 @@ const dom = {
     expenseModal:    $('#expenseModal'),
     closeExpenseModal:$('#closeExpenseModal'),
     expenseForm:     $('#expenseForm'),
+    expenseType:     $('#expenseType'),
     expenseDesc:     $('#expenseDesc'),
     expenseAmount:   $('#expenseAmount'),
     expenseCategory: $('#expenseCategory'),
@@ -535,22 +537,30 @@ function openEditTask(id) {
 function renderExpenses() {
     const expenses = Store.getExpenses();
     const now = new Date();
-    const today = todayStr();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}`;
 
     // Summary
-    const monthExpenses = expenses.filter(e => e.date.startsWith(currentMonth));
-    const todayExpenses = expenses.filter(e => e.date === today);
-    const monthSum = monthExpenses.reduce((s, e) => s + e.amount, 0);
-    const todaySum = todayExpenses.reduce((s, e) => s + e.amount, 0);
+    const monthTransactions = expenses.filter(e => e.date.startsWith(currentMonth));
+    let monthIncome = 0;
+    let monthSpent = 0;
 
-    dom.monthTotal.textContent = `₹${monthSum.toLocaleString('en-IN')}`;
-    dom.todayTotal.textContent = `₹${todaySum.toLocaleString('en-IN')}`;
+    monthTransactions.forEach(e => {
+        if (e.type === 'income') monthIncome += e.amount;
+        else monthSpent += e.amount;
+    });
+
+    const monthBalance = monthIncome - monthSpent;
+
+    dom.monthTotal.textContent = `₹${monthBalance.toLocaleString('en-IN')}`;
+    dom.incomeTotal.textContent = `₹${monthIncome.toLocaleString('en-IN')}`;
+    dom.spentTotal.textContent = `₹${monthSpent.toLocaleString('en-IN')}`;
 
     // Top category
     const catTotals = {};
-    monthExpenses.forEach(e => {
-        catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
+    monthTransactions.forEach(e => {
+        if (e.type !== 'income') {
+            catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
+        }
     });
     const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
     dom.topCategory.textContent = topCat ? `${EXPENSE_ICONS[topCat[0]] || ''} ${capitalize(topCat[0])}` : '—';
@@ -561,19 +571,23 @@ function renderExpenses() {
     // Expense list (sorted newest first)
     const sorted = [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
     if (sorted.length === 0) {
-        dom.expenseList.innerHTML = '<p class="empty-state">No expenses recorded. Click <strong>+ Add Expense</strong> to start tracking!</p>';
+        dom.expenseList.innerHTML = '<p class="empty-state">No transactions recorded. Click <strong>+ Add Expense</strong> to start tracking!</p>';
     } else {
-        dom.expenseList.innerHTML = sorted.map(e => `
+        dom.expenseList.innerHTML = sorted.map(e => {
+            const isIncome = e.type === 'income';
+            const sign = isIncome ? '+' : '-';
+            const amountClass = isIncome ? 'income' : 'expense';
+            return `
             <div class="expense-item" data-id="${e.id}">
                 <span class="expense-icon">${EXPENSE_ICONS[e.category] || '📦'}</span>
                 <div class="expense-body">
                     <div class="expense-desc">${escHtml(e.description)}</div>
                     <div class="expense-date">${formatDate(e.date)} · ${capitalize(e.category)}</div>
                 </div>
-                <span class="expense-amount">₹${e.amount.toLocaleString('en-IN')}</span>
+                <span class="expense-amount ${amountClass}">${sign}₹${e.amount.toLocaleString('en-IN')}</span>
                 <button class="expense-delete" data-id="${e.id}" title="Delete">🗑</button>
             </div>
-        `).join('');
+        `}).join('');
 
         dom.expenseList.querySelectorAll('.expense-delete').forEach(el => {
             el.addEventListener('click', () => {
@@ -654,6 +668,7 @@ function initModals() {
         e.preventDefault();
         const expense = {
             id: generateId(),
+            type: dom.expenseType.value,
             description: dom.expenseDesc.value.trim(),
             amount: parseFloat(dom.expenseAmount.value),
             category: dom.expenseCategory.value,

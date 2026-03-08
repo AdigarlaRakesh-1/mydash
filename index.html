@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="MyDash">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <!-- base href ensures relative links work when hosted in a sub‑folder (GitHub Pages) -->
     <base href="./">
 
@@ -172,16 +172,16 @@
                 <!-- Summary cards -->
                 <div class="expense-summary">
                     <div class="summary-card">
-                        <span class="summary-label">This Month</span>
+                        <span class="summary-label">Balance</span>
                         <span class="summary-value" id="monthTotal">₹0</span>
                     </div>
                     <div class="summary-card">
-                        <span class="summary-label">Today</span>
-                        <span class="summary-value" id="todayTotal">₹0</span>
+                        <span class="summary-label">Income</span>
+                        <span class="summary-value" id="incomeTotal">₹0</span>
                     </div>
                     <div class="summary-card">
-                        <span class="summary-label">Top Category</span>
-                        <span class="summary-value summary-value-sm" id="topCategory">—</span>
+                        <span class="summary-label">Spent</span>
+                        <span class="summary-value" id="spentTotal">₹0</span>
                     </div>
                 </div>
 
@@ -269,13 +269,26 @@
     <div class="modal-overlay" id="expenseModal">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>Add Expense</h3>
+                <h3>Add Transaction</h3>
                 <button class="modal-close" id="closeExpenseModal">✕</button>
             </div>
             <form id="expenseForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="expenseType">Type</label>
+                        <select id="expenseType">
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="expenseDate">Date</label>
+                        <input type="date" id="expenseDate" required>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label for="expenseDesc">Description</label>
-                    <input type="text" id="expenseDesc" placeholder="e.g. Groceries" required>
+                    <input type="text" id="expenseDesc" placeholder="e.g. Groceries / Salary" required>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -285,6 +298,7 @@
                     <div class="form-group">
                         <label for="expenseCategory">Category</label>
                         <select id="expenseCategory">
+                            <option value="salary">💰 Salary</option>
                             <option value="food">🍔 Food</option>
                             <option value="transport">🚗 Transport</option>
                             <option value="shopping">🛍️ Shopping</option>
@@ -296,11 +310,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="expenseDate">Date</label>
-                    <input type="date" id="expenseDate" required>
-                </div>
-                <button type="submit" class="btn-primary btn-full">Add Expense</button>
+                <button type="submit" class="btn-primary btn-full">Save Transaction</button>
             </form>
         </div>
     </div>
