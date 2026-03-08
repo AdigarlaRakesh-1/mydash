@@ -759,10 +759,42 @@ document.addEventListener('DOMContentLoaded', init);
 
 // ===== PWA SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // register relative so scope is correct when deployed to a subdirectory
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('Service Worker registered', reg))
-            .catch(err => console.error('Service Worker registration failed:', err));
+    window.addEventListener('load', async () => {
+        try {
+            const reg = await navigator.serviceWorker.register('./sw.js');
+            console.log('Service Worker registered', reg);
+            
+            // Check for updates periodically
+            setInterval(() => {
+                reg.update();
+            }, 60 * 60 * 1000); // Every hour
+            
+            // Handle updates when a new SW is waiting
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                if (!newWorker) return;
+                
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // New update available, notify user to refresh
+                        if (confirm('A new version of MyDash is available! Refresh to update?')) {
+                            newWorker.postMessage({ action: 'skipWaiting' });
+                        }
+                    }
+                });
+            });
+
+        } catch (err) {
+            console.error('Service Worker registration failed:', err);
+        }
+    });
+
+    // Refresh the page once the new SW takes over
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+        }
     });
 }

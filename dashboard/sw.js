@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mydash-v3';
+const CACHE_NAME = 'mydash-v4';
 const ASSETS = [
     './',            // base path of the app
     './index.html',
@@ -46,4 +46,11 @@ self.addEventListener('fetch', (e) => {
                 });
             })
     );
+});
+
+// Allow the web app to trigger skipWaiting
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.action === 'skipWaiting') {
+        self.skipWaiting();
+    }
 });
