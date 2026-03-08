@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -22,29 +22,80 @@ const Store = {
     _userId: null,
     _tasks: [],
     _expenses: [],
+    _unsubscribeTasks: null,
+    _unsubscribeExpenses: null,
 
     initAuth(callback) {
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 this._userId = user.uid;
+                
+                // Update UI Profile
+                const profile = document.getElementById('sidebarProfile');
+                const avatar = document.getElementById('userAvatar');
+                const name = document.getElementById('userName');
+                const email = document.getElementById('userEmail');
+                if (profile) profile.style.display = 'flex';
+                if (avatar) avatar.src = user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || user.email);
+                if (name) name.textContent = user.displayName || 'Anonymous';
+                if (email) email.textContent = user.email;
+
+                // Hide login, show app layout
+                document.getElementById('loginScreen').classList.remove('show');
+                document.querySelector('.app-layout').style.display = 'flex';
+
                 this._setupListeners(callback);
             } else {
-                signInAnonymously(auth).catch(err => console.error("Login failed:", err));
+                this._userId = null;
+                this._tasks = [];
+                this._expenses = [];
+                if (this._unsubscribeTasks) this._unsubscribeTasks();
+                if (this._unsubscribeExpenses) this._unsubscribeExpenses();
+                
+                // Show login, hide app layout
+                document.getElementById('loginScreen').classList.add('show');
+                document.querySelector('.app-layout').style.display = 'none';
+                
+                const profile = document.getElementById('sidebarProfile');
+                if (profile) profile.style.display = 'none';
+                if (callback) callback(); // Initial empty render
             }
         });
+
+        // Attach login/logout handlers
+        const btnLogin = document.getElementById('btnGoogleLogin');
+        if (btnLogin) {
+            btnLogin.addEventListener('click', () => {
+                const provider = new GoogleAuthProvider();
+                signInWithPopup(auth, provider).catch(err => {
+                    console.error("Login failed", err);
+                    alert("Login failed: " + err.message);
+                });
+            });
+        }
+
+        const btnLogout = document.getElementById('btnLogout');
+        if (btnLogout) {
+            btnLogout.addEventListener('click', () => {
+                signOut(auth).catch(err => console.error("Logout failed", err));
+            });
+        }
     },
 
     _setupListeners(onDataChanged) {
+        if (this._unsubscribeTasks) this._unsubscribeTasks();
+        if (this._unsubscribeExpenses) this._unsubscribeExpenses();
+
         const tasksRef = collection(db, `users/${this._userId}/tasks`);
-        onSnapshot(tasksRef, (snapshot) => {
+        this._unsubscribeTasks = onSnapshot(tasksRef, (snapshot) => {
             this._tasks = snapshot.docs.map(doc => doc.data());
-            onDataChanged();
+            if (onDataChanged) onDataChanged();
         });
 
         const expsRef = collection(db, `users/${this._userId}/expenses`);
-        onSnapshot(expsRef, (snapshot) => {
+        this._unsubscribeExpenses = onSnapshot(expsRef, (snapshot) => {
             this._expenses = snapshot.docs.map(doc => doc.data());
-            onDataChanged();
+            if (onDataChanged) onDataChanged();
         });
     },
 
@@ -706,12 +757,22 @@ function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
-// ===== PWA SERVICE WORKER =====
+// ===== PWA SERVICE WORKER (TEMPORARILY DISABLED TO CLEAR CACHE) =====
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // register relative so scope is correct when deployed to a subdirectory
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('Service Worker registered', reg))
-            .catch(err => console.error('Service Worker registration failed:', err));
+    window.addEventListener('load', async () => {
+        try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+                console.log('Service Worker unregistered successfully.');
+            }
+            // Force reload one time to ensure fresh cache
+            if (!sessionStorage.getItem('sw_cleared')) {
+                sessionStorage.setItem('sw_cleared', 'true');
+                window.location.reload(true);
+            }
+        } catch (err) {
+            console.error('Error during Service Worker cleanup:', err);
+        }
     });
 }
