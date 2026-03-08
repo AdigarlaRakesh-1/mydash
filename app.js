@@ -52,29 +52,45 @@ const Store = {
     getExpenses() { return this._expenses; },
 
     async saveTask(task) {
-        if (!this._userId) return;
+        if (!this._userId) { console.error("Missing UserID during saveTask"); return; }
         if (!task.id) task.id = generateId(); // Ensure ID exists
-        const ref = doc(db, `users/${this._userId}/tasks`, task.id);
-        await setDoc(ref, task);
+        try {
+            const ref = doc(db, `users/${this._userId}/tasks`, task.id);
+            await setDoc(ref, task);
+            console.log("Task saved to Firebase:", task.id);
+        } catch (err) {
+            console.error("FIREBASE ERROR (saveTask):", err.message, err.code);
+            alert("Firebase Error: " + err.message);
+        }
     },
 
     async deleteTask(id) {
         if (!this._userId) return;
-        const ref = doc(db, `users/${this._userId}/tasks`, id);
-        await deleteDoc(ref);
+        try {
+            const ref = doc(db, `users/${this._userId}/tasks`, id);
+            await deleteDoc(ref);
+        } catch(err) { console.error("Error deleting task:", err); }
     },
 
     async saveExpense(exp) {
-        if (!this._userId) return;
+        if (!this._userId) { console.error("Missing UserID during saveExpense"); return; }
         if (!exp.id) exp.id = generateId();
-        const ref = doc(db, `users/${this._userId}/expenses`, exp.id);
-        await setDoc(ref, exp);
+        try {
+            const ref = doc(db, `users/${this._userId}/expenses`, exp.id);
+            await setDoc(ref, exp);
+            console.log("Expense saved to Firebase:", exp.id);
+        } catch (err) {
+            console.error("FIREBASE ERROR (saveExpense):", err.message, err.code);
+            alert("Firebase Error: " + err.message);
+        }
     },
 
     async deleteExpense(id) {
         if (!this._userId) return;
-        const ref = doc(db, `users/${this._userId}/expenses`, id);
-        await deleteDoc(ref);
+        try {
+            const ref = doc(db, `users/${this._userId}/expenses`, id);
+            await deleteDoc(ref);
+        } catch(err) { console.error("Error deleting expense:", err); }
     }
 };
 
@@ -693,7 +709,8 @@ document.addEventListener('DOMContentLoaded', init);
 // ===== PWA SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+        // register relative so scope is correct when deployed to a subdirectory
+        navigator.serviceWorker.register('./sw.js')
             .then(reg => console.log('Service Worker registered', reg))
             .catch(err => console.error('Service Worker registration failed:', err));
     });
