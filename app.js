@@ -1068,18 +1068,55 @@ setInterval(checkDailyAlerts, 30 * 60 * 1000);
 // ===== AUTH HANDLERS =====
 function showAuthError(message) {
     const statusEl = document.getElementById('authStatus');
-    statusEl.textContent = message;
-    statusEl.className = 'auth-status error';
+    if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.className = 'auth-status error';
+    }
+}
+
+function setAuthLoading(loading, buttonId, originalText) {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+    if (loading) {
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
+        btn.style.opacity = '0.7';
+    } else {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        btn.style.opacity = '1';
+    }
+}
+
+function showApp() {
+    document.getElementById('authOverlay').style.display = 'none';
+    document.querySelector('.app-layout').style.display = 'flex';
+    if (!dashboardInitialized) {
+        dashboardInitialized = true;
+        setupDashboard();
+    }
+}
+
+function hideApp() {
+    document.getElementById('authOverlay').style.display = 'flex';
+    document.querySelector('.app-layout').style.display = 'none';
+    window.currentUser = null;
+    dashboardInitialized = false; // Reset so it re-inits on next login
 }
 
 async function handleLogin(e) {
     e.preventDefault();
     const email = document.getElementById('loginEmail').value;
     const pass = document.getElementById('loginPassword').value;
+    
+    setAuthLoading(true, 'btnLoginSubmit', 'Login');
     try {
-        await signInWithEmailAndPassword(auth, email, pass);
+        const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+        window.currentUser = userCredential.user;
+        showApp(); // Proactive transition for mobile
     } catch (error) {
         showAuthError("❌ Login failed: " + error.message);
+        setAuthLoading(false, 'btnLoginSubmit', 'Login');
     }
 }
 
@@ -1087,16 +1124,23 @@ async function handleSignup(e) {
     e.preventDefault();
     const email = document.getElementById('signupEmail').value;
     const pass = document.getElementById('signupPassword').value;
+    
+    setAuthLoading(true, 'btnSignupSubmit', 'Sign Up');
     try {
-        await createUserWithEmailAndPassword(auth, email, pass);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        window.currentUser = userCredential.user;
+        showApp(); // Proactive transition for mobile
     } catch (error) {
         showAuthError("❌ Signup failed: " + error.message);
+        setAuthLoading(false, 'btnSignupSubmit', 'Sign Up');
     }
 }
 
 async function handleGoogleLogin() {
     try {
-        await signInWithPopup(auth, googleProvider);
+        const result = await signInWithPopup(auth, googleProvider);
+        window.currentUser = result.user;
+        showApp(); // Proactive transition for mobile
     } catch (error) {
         showAuthError("❌ Google Login failed: " + error.message);
     }
@@ -1136,6 +1180,12 @@ function initAuthUI() {
     document.getElementById('signupForm').addEventListener('submit', handleSignup);
     document.getElementById('btnGoogleLogin').addEventListener('click', handleGoogleLogin);
     
+    // Set IDs for buttons to handle loading states
+    const loginSubmit = document.querySelector('#loginForm button[type="submit"]');
+    if (loginSubmit) loginSubmit.id = 'btnLoginSubmit';
+    const signupSubmit = document.querySelector('#signupForm button[type="submit"]');
+    if (signupSubmit) signupSubmit.id = 'btnSignupSubmit';
+    
     const btnLogout = document.getElementById('btnLogout');
     if (btnLogout) btnLogout.addEventListener('click', handleLogout);
 }
@@ -1147,7 +1197,7 @@ let dashboardInitialized = false;
 async function init() {
     initAuthUI();
 
-    // Re-check auth state reactively
+    // Re-check auth state reactively (Fallback and Persistence)
     onAuthStateChanged(auth, async (user) => {
         if (user && user.isAnonymous) {
             await signOut(auth);
@@ -1155,21 +1205,10 @@ async function init() {
         }
 
         if (user) {
-            // Hide overlay, show app
-            document.getElementById('authOverlay').style.display = 'none';
-            document.querySelector('.app-layout').style.display = 'flex';
-            
             window.currentUser = user;
-
-            if (!dashboardInitialized) {
-                dashboardInitialized = true;
-                setupDashboard();
-            }
+            showApp(); 
         } else {
-            // Not logged in: show overlay
-            document.getElementById('authOverlay').style.display = 'flex';
-            document.querySelector('.app-layout').style.display = 'none';
-            window.currentUser = null;
+            hideApp();
         }
     });
 }
