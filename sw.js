@@ -1,21 +1,25 @@
 self.addEventListener('install', (e) => {
-    // Force the new taking-over of the service worker
     self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
-    e.waitUntil(
-        caches.keys().then((keyList) => {
-            return Promise.all(keyList.map((key) => caches.delete(key)));
-        }).then(() => {
-            // Unregister the service worker completely
-            self.registration.unregister();
-            return self.clients.claim();
-        })
-    );
+    e.waitUntil(self.clients.claim());
 });
 
-// Pass-through fetch for anything else
 self.addEventListener('fetch', (e) => {
-    // Do nothing, just let the network handle it
+    // Basic pass-through for now
+    e.respondWith(fetch(e.request));
+});
+
+// Handle notification click
+self.addEventListener('notificationclick', (e) => {
+    e.notification.close();
+    e.waitUntil(
+        clients.matchAll({ type: 'window' }).then((clientList) => {
+            if (clientList.length > 0) {
+                return clientList[0].focus();
+            }
+            return clients.openWindow('./');
+        })
+    );
 });

@@ -34,6 +34,8 @@
     --blue-soft: rgba(59, 130, 246, 0.10);
     --purple: #8b5cf6;
     --purple-soft: rgba(139, 92, 246, 0.10);
+    --pink: #ec4899;
+    --pink-soft: rgba(236, 72, 153, 0.10);
 
     --text-primary: #1a1a2e;
     --text-secondary: #6b7280;
@@ -551,6 +553,7 @@ body {
 .event-dot.health { background: var(--orange); }
 .event-dot.finance { background: var(--purple); }
 .event-dot.study { background: var(--blue); }
+.event-dot.birthday { background: var(--pink); }
 
 /* ===== DAY DETAIL PANEL ===== */
 .day-detail-panel h3 {
@@ -867,7 +870,7 @@ body {
     color: var(--green);
 }
 .expense-amount.expense {
-    color: var(--text-primary);
+    color: var(--red);
 }
 .expense-delete {
     width: 28px; height: 28px;
@@ -1182,3 +1185,353 @@ body {
     color: var(--red);
     background: var(--red-soft);
 }
+/* ===== STICKY NOTE WIDGET ===== */
+.sticky-note-card {
+    background: rgba(255, 235, 150, 0.08); /* Subtle yellow tint */
+    border: 1px solid rgba(255, 235, 150, 0.2);
+    display: flex;
+    flex-direction: column;
+}
+.sticky-note-card.full-page {
+    min-height: calc(100vh - 180px); /* Fill available space */
+}
+.sticky-note-card .section-header {
+    border-bottom: 1px solid rgba(255, 235, 150, 0.15);
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+}
+.sticky-note-input {
+    flex: 1;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+    min-height: 120px;
+}
+.sticky-note-input::placeholder {
+    color: var(--text-tertiary);
+}
+.note-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.save-status {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.btn-primary.success {
+    background: var(--green);
+    border-color: var(--green);
+}
+/* ===== NOTES TAB ===== */
+.notes-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    height: calc(100vh - 120px);
+}
+@media (max-width: 900px) {
+    .notes-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        height: auto;
+    }
+}
+.notes-sidebar {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+.note-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+.note-list-item {
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.note-list-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+.note-list-item.active {
+    background: var(--accent-transparent);
+    border-color: var(--accent);
+}
+.note-list-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.note-list-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.notes-editor {
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 235, 150, 0.05) !important;
+    border-color: rgba(255, 235, 150, 0.15) !important;
+}
+.editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 235, 150, 0.15);
+}
+.note-title-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    outline: none;
+}
+.note-title-input::placeholder {
+    color: var(--text-muted);
+}
+/* ===== QUILL EDITOR THEME OVERRIDES ===== */
+.ql-toolbar.ql-snow {
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 235, 150, 0.15) !important;
+    padding: 8px 0 !important;
+    margin-bottom: 15px;
+}
+.ql-container.ql-snow {
+    border: none !important;
+    font-family: inherit !important;
+    font-size: 14px !important;
+    color: var(--text-primary) !important;
+}
+.ql-editor {
+    padding: 0 !important;
+    min-height: 200px;
+}
+.ql-editor.ql-blank::before {
+    color: var(--text-muted) !important;
+    font-style: normal !important;
+}
+.ql-snow .ql-stroke {
+    stroke: var(--text-primary) !important;
+}
+.ql-snow .ql-fill, .ql-snow .ql-stroke.ql-fill {
+    fill: var(--text-primary) !important;
+}
+.ql-snow .ql-picker {
+    color: var(--text-primary) !important;
+}
+/* ===== WIDGETS ===== */
+.widget-card {
+    margin-bottom: 20px;
+}
+.tester-content .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+}
+.tester-content .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+.sidebar-nav ul li a:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--accent);
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border-light);
+}
+.logout-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+.logout-link:hover {
+    color: var(--accent);
+}
+.quote-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0;
+}
+.quote-text {
+    font-size: 1.05rem;
+    font-style: italic;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+.quote-author {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    align-self: flex-end;
+}
+/* ===== AUTHENTICATION OVERLAY ===== */
+.auth-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #ffffff; /* Clean White Background */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.auth-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 40px;
+    border-radius: 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+    animation: fadeIn 0.5s ease-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.auth-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.auth-logo {
+    margin-bottom: 15px;
+}
+.auth-logo img {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+}
+.auth-header h1 {
+    font-size: 1.75rem;
+    margin-bottom: 8px;
+    color: #1e293b;
+    font-weight: 800;
+}
+.auth-header p {
+    color: #64748b;
+    font-size: 0.95rem;
+}
+.auth-form label {
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    display: block;
+}
+.auth-form input {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #1e293b !important;
+}
+.auth-form input:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(100, 108, 255, 0.1) !important;
+}
+.auth-divider {
+    text-align: center;
+    margin: 25px 0;
+    position: relative;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+.auth-divider::before, .auth-divider::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: #e2e8f0;
+}
+.auth-divider::before { left: 0; }
+.auth-divider::after { right: 0; }
+
+.btn-google {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+.btn-google img {
+    width: 18px;
+    height: 18px;
+}
+.btn-google:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: none;
+}
+.auth-footer {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 0.9rem;
+    color: #64748b;
+}
+.auth-footer a {
+    color: var(--accent);
+    font-weight: 700;
+}
+.auth-status {
+    margin-top: 20px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    text-align: center;
+    display: none;
+}
+.auth-status.error {
+    display: block;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+.auth-status.success {
+    display: block;
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+.hidden { display: none !important; }
