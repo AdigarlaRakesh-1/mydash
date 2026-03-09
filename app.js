@@ -755,6 +755,11 @@ function initModals() {
         dom.taskEditId.value = '';
         renderTaskList();
         renderCalendar();
+        
+        // Trigger alert check if task is for today
+        if (task.date === todayStr()) {
+            checkDailyAlerts();
+        }
     });
 
     // Expense modal
@@ -991,6 +996,8 @@ async function checkDailyAlerts() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
     const today = todayStr();
+    console.log(`Checking for automated reminders on ${today}...`);
+    // We keep a record of seen alerts for today to avoid duplicates
     const storageKey = `mydash_alerts_seen_${today}`;
     let seenAlerts = [];
     try {
@@ -999,14 +1006,19 @@ async function checkDailyAlerts() {
     } catch (e) {}
 
     const tasks = Store.getTasks();
-    const todayTasks = tasks.filter(t => t.date === today && !seenAlerts.includes(t.id));
+    // Only notify for incomplete tasks/events due today that haven't been "seen" in this session's alerts
+    const todayTasks = tasks.filter(t => 
+        t.date === today && 
+        !t.completed && 
+        !seenAlerts.includes(t.id)
+    );
 
     if (todayTasks.length === 0) return;
 
     const registration = await navigator.serviceWorker.ready;
     
     todayTasks.forEach(t => {
-        let title = 'Dashboard Alert';
+        let title = 'MyDash Reminder';
         let body = t.title;
 
         if (t.type === 'birthday' || t.category === 'birthday') {
@@ -1015,15 +1027,16 @@ async function checkDailyAlerts() {
         } else if (t.type === 'event') {
             title = '📅 Event Today';
         } else {
-            title = '✅ Task Due';
+            title = '✅ Task Due Today';
         }
 
         registration.showNotification(title, {
             body: body,
-            icon: 'icons/icon-192.png',
-            badge: 'icons/icon-192.png',
+            icon: './icons/icon-192.png',
+            badge: './icons/icon-192.png',
             tag: t.id,
-            renotify: true
+            renotify: true,
+            vibrate: [200, 100, 200]
         });
 
         seenAlerts.push(t.id);
@@ -1047,36 +1060,9 @@ async function initPWA() {
     await checkDailyAlerts();
 }
 
-async function triggerManualTestNotif() {
-    const statusEl = document.getElementById('testerStatus');
-    if (Notification.permission !== 'granted') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-            statusEl.textContent = '❌ Permission Denied';
-            return;
-        }
-    }
 
-    statusEl.textContent = '⏳ Alert in 5s... Lock your screen!';
-    
-    setTimeout(async () => {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            registration.showNotification('Dashboard Test Alert', {
-                body: '📲 If you see this, mobile app notifications are working!',
-                icon: 'icons/icon-192.png',
-                badge: 'icons/icon-192.png',
-                tag: 'test-notif',
-                renotify: true
-            });
-            statusEl.textContent = '✅ Notification Sent!';
-            setTimeout(() => { statusEl.textContent = ''; }, 3000);
-        } catch (e) {
-            statusEl.textContent = '❌ Error triggering alert';
-        }
-    }, 5000);
-}
-
+// Automated background check periodically (every 30 mins)
+setInterval(checkDailyAlerts, 30 * 60 * 1000);
 
 // ===== AUTH HANDLERS =====
 function showAuthError(message) {
@@ -1182,11 +1168,7 @@ async function init() {
             dom.addFromCalendar.addEventListener('click', () => openNewTask(selectedDate));
         }
 
-        // Notification Tester
-        const btnTestNotif = document.getElementById('btnTestNotif');
-        if (btnTestNotif) {
-            btnTestNotif.addEventListener('click', () => triggerManualTestNotif());
-        }
+
 
         Store.initLocalData(() => {
             initNotes();
