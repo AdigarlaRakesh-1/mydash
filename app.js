@@ -5,7 +5,8 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signInWithPopup,
-    signOut 
+    signOut,
+    onAuthStateChanged
 } from './firebase-config.js';
 import { 
     collection, 
@@ -1141,55 +1142,73 @@ function initAuthUI() {
 
 
 // ===== INIT =====
+let dashboardInitialized = false;
+
 async function init() {
     initAuthUI();
 
-    // Wait for the persistent auth observer in firebase-config.js
-    const user = await window.firebaseAuthLoaded;
-    
-    if (user) {
-        // Hide overlay, show app
-        document.getElementById('authOverlay').style.display = 'none';
-        document.querySelector('.app-layout').style.display = 'flex';
-        
-        initState();
-        renderHeader();
-        initTabs();
-        initCalendarNav();
-        initFilters();
-        initModals();
-
-        // Calendar-view Add buttons
-        const addTaskFromCal = document.getElementById('addTaskFromCal');
-        if (addTaskFromCal) {
-            addTaskFromCal.addEventListener('click', () => openNewTask(selectedDate));
-        }
-        if (dom.addFromCalendar) {
-            dom.addFromCalendar.addEventListener('click', () => openNewTask(selectedDate));
+    // Re-check auth state reactively
+    onAuthStateChanged(auth, async (user) => {
+        if (user && user.isAnonymous) {
+            await signOut(auth);
+            return;
         }
 
+        if (user) {
+            // Hide overlay, show app
+            document.getElementById('authOverlay').style.display = 'none';
+            document.querySelector('.app-layout').style.display = 'flex';
+            
+            window.currentUser = user;
 
-
-        Store.initLocalData(() => {
-            initNotes();
-            renderNotesList();
-            if (Store.getNotes().length > 0) {
-                openNote(Store.getNotes()[0].id);
-            } else {
-                createNewNote();
+            if (!dashboardInitialized) {
+                dashboardInitialized = true;
+                setupDashboard();
             }
-            renderCalendar();
-            renderTaskList();
-            renderExpenses();
-            renderRecentExpenses();
-            initDashboardWidgets();
-            initPWA();
-        });
-    } else {
-        // Not logged in: show overlay
-        document.getElementById('authOverlay').style.display = 'flex';
-        document.querySelector('.app-layout').style.display = 'none';
+        } else {
+            // Not logged in: show overlay
+            document.getElementById('authOverlay').style.display = 'flex';
+            document.querySelector('.app-layout').style.display = 'none';
+            window.currentUser = null;
+        }
+    });
+}
+
+function setupDashboard() {
+    initState();
+    renderHeader();
+    initTabs();
+    initCalendarNav();
+    initFilters();
+    initModals();
+
+    // Calendar-view Add buttons
+    const addTaskFromCal = document.getElementById('addTaskFromCal');
+    if (addTaskFromCal) {
+        addTaskFromCal.addEventListener('click', () => openNewTask(selectedDate));
     }
+    if (dom.addFromCalendar) {
+        dom.addFromCalendar.addEventListener('click', () => openNewTask(selectedDate));
+    }
+
+    const btnLogout = document.getElementById('btnLogout');
+    if (btnLogout) btnLogout.addEventListener('click', handleLogout);
+
+    Store.initLocalData(() => {
+        initNotes();
+        renderNotesList();
+        if (Store.getNotes().length > 0) {
+            openNote(Store.getNotes()[0].id);
+        } else {
+            createNewNote();
+        }
+        renderCalendar();
+        renderTaskList();
+        renderExpenses();
+        renderRecentExpenses();
+        initDashboardWidgets();
+        initPWA();
+    });
 }
 // Finalize app script
 console.log('App.js loaded');

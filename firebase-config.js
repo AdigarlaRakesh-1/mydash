@@ -52,5 +52,6 @@ export {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signInWithPopup,
-    signOut
+    signOut,
+    onAuthStateChanged
 };
