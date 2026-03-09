@@ -9,8 +9,7 @@
     <meta name="description" content="Personal dashboard with calendar, tasks, and expense tracking.">
 
 
-    <!-- base href ensures relative links work when hosted in a sub‑folder (GitHub Pages) -->
-    <base href="./">
+
 
     <!-- Fonts & Styles -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,7 +22,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="MyDash">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
     
     <!-- Firebase SDKs -->
     <script type="importmap">
@@ -37,7 +36,12 @@
     </script>
     <script type="module" src="firebase-config.js"></script>
     
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css?v=1.1">
+    <style>
+        /* Fallback for critical classes in case style.css fails to load */
+        .hidden { display: none !important; }
+        .auth-overlay { background: #ffffff; }
+    </style>
 </head>
 
 <body>
@@ -45,7 +49,7 @@
     <div id="authOverlay" class="auth-overlay">
         <div class="auth-card">
             <div class="auth-header">
-                <div class="auth-logo"><img src="icons/icon-192.png" alt="MyDash Logo"></div>
+                <div class="auth-logo"><img src="./icons/icon-192.png" alt="MyDash Logo"></div>
                 <h1>Welcome to MyDash</h1>
                 <p id="authSubtitle">Manage your life, beautifully.</p>
             </div>
