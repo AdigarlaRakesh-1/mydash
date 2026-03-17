@@ -1,10 +1,10 @@
 import { initializeApp } from "firebase/app";
 import { 
     getAuth, 
-    signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, 
-    signInWithPopup, 
+    signInWithPopup,
     GoogleAuthProvider,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
     onAuthStateChanged,
     signOut
 } from "firebase/auth";
@@ -24,21 +24,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Google Provider
 const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
 
 // Global Auth State Helper
 window.firebaseAuthLoaded = new Promise((resolve) => {
     onAuthStateChanged(auth, async (user) => {
-        // If we have an anonymous user from the previous implementation, 
-        // sign them out to force the new Login screen.
-        if (user && user.isAnonymous) {
-            console.log("Stale anonymous session detected. Signing out...");
-            await signOut(auth);
-            window.currentUser = null;
-            resolve(null);
-            return;
-        }
-
         window.currentUser = user;
         window.db = db;
         resolve(user);
@@ -48,10 +41,11 @@ window.firebaseAuthLoaded = new Promise((resolve) => {
 export { 
     db, 
     auth, 
+    signInWithPopup,
+    GoogleAuthProvider,
     googleProvider,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-    signInWithPopup,
     signOut,
     onAuthStateChanged
 };

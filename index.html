@@ -46,6 +46,37 @@
         .auth-overlay {
             background: #ffffff;
         }
+
+        /* Instant loading spinner — no external CSS dependency */
+        .auth-loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            padding: 30px 20px;
+        }
+        .auth-spinner {
+            width: 36px; height: 36px;
+            border: 3px solid #e8e8ec;
+            border-top-color: #f97316;
+            border-radius: 50%;
+            animation: auth-spin 0.7s linear infinite;
+        }
+        @keyframes auth-spin {
+            to { transform: rotate(360deg); }
+        }
+        .auth-loader-text {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 0.85rem;
+            color: #9ca3af;
+        }
+        .auth-btn-wrap {
+            padding: 20px;
+            display: none; /* hidden until Firebase is ready */
+        }
+        .auth-btn-wrap.ready {
+            display: block;
+        }
     </style>
 </head>
 
@@ -59,39 +90,33 @@
                 <p id="authSubtitle">Manage your life, beautifully.</p>
             </div>
 
-            <div id="loginFormContainer">
-                <form id="loginForm" class="auth-form">
-                    <div class="form-group">
-                        <label for="loginEmail">Email</label>
-                        <input type="email" id="loginEmail" placeholder="your@email.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="loginPassword">Password</label>
-                        <input type="password" id="loginPassword" placeholder="••••••••" required>
-                    </div>
-                    <button type="submit" class="btn-primary btn-full">Login</button>
-                </form>
-                <div class="auth-divider"><span>OR</span></div>
-                <button id="btnGoogleLogin" class="btn-google btn-full">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon">
-                    Sign in with Google
-                </button>
-                <p class="auth-footer">Don't have an account? <a href="#" id="toSignup">Sign up</a></p>
+            <!-- Loading spinner -->
+            <div class="auth-loader" id="authLoader">
+                <div class="auth-spinner"></div>
+                <span class="auth-loader-text">Loading...</span>
             </div>
 
-            <div id="signupFormContainer" class="hidden">
-                <form id="signupForm" class="auth-form">
-                    <div class="form-group">
-                        <label for="signupEmail">Email</label>
-                        <input type="email" id="signupEmail" placeholder="your@email.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="signupPassword">Password</label>
-                        <input type="password" id="signupPassword" placeholder="At least 6 characters" required>
-                    </div>
-                    <button type="submit" class="btn-primary btn-full">Create Account</button>
+            <!-- Auth buttons (shown after Firebase is ready) -->
+            <div class="auth-btn-wrap" id="authBtnWrap">
+                <!-- Google Sign In -->
+                <button id="btnGoogleLogin" class="auth-social-btn google-btn">
+                    <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#34A853" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#FBBC05" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                    Continue with Google
+                </button>
+
+                <!-- Divider -->
+                <div class="auth-divider"><span>or use email</span></div>
+
+                <!-- Email form -->
+                <form id="emailAuthForm" class="auth-email-form">
+                    <input type="email" id="authEmail" placeholder="Email address" required>
+                    <input type="password" id="authPassword" placeholder="Password" required minlength="6">
+                    <button type="submit" class="btn-primary btn-full" id="btnEmailAuth">Sign In</button>
                 </form>
-                <p class="auth-footer">Already have an account? <a href="#" id="toLogin">Login</a></p>
+                <p class="auth-toggle-text">
+                    <span id="authToggleMsg">Don't have an account?</span>
+                    <a href="#" id="authToggleLink">Sign Up</a>
+                </p>
             </div>
 
             <div id="authStatus" class="auth-status"></div>
@@ -274,6 +299,17 @@
                     </div>
                 </div>
 
+                <!-- Budget Cards -->
+                <div class="content-card">
+                    <div class="section-header">
+                        <h3>💼 My Budgets</h3>
+                        <button class="btn-primary btn-sm" id="addBudgetBtn">+ New Budget</button>
+                    </div>
+                    <div class="budget-cards" id="budgetCards">
+                        <p class="empty-state">No budgets yet. Create one to track your spending!</p>
+                    </div>
+                </div>
+
                 <!-- Category chart -->
                 <div class="content-card">
                     <div class="section-header">
@@ -411,6 +447,10 @@
                     <label for="expenseDesc">Description</label>
                     <input type="text" id="expenseDesc" placeholder="e.g. Groceries / Salary" required>
                 </div>
+                <div class="form-group">
+                    <label for="expensePaidTo">Paid To (optional)</label>
+                    <input type="text" id="expensePaidTo" placeholder="e.g. Ravi, Amazon, Zomato">
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="expenseAmount">Amount (₹)</label>
@@ -428,10 +468,45 @@
                             <option value="health">💊 Health</option>
                             <option value="education">📚 Education</option>
                             <option value="other">📦 Other</option>
+                            <option value="__custom__">✏️ + Custom</option>
                         </select>
                     </div>
                 </div>
-                <button type="submit" class="btn-primary btn-full">Save Transaction</button>
+                <div class="form-group hidden" id="customCategoryGroup">
+                    <label for="customCategoryName">Custom Category Name</label>
+                    <input type="text" id="customCategoryName" placeholder="e.g. Project Alpha, Rent, Gym">
+                </div>
+                <div class="form-group">
+                    <label for="expenseBudget">Link to Budget (optional)</label>
+                    <select id="expenseBudget">
+                        <option value="">— None —</option>
+                    </select>
+                </div>
+                <div class="form-row" style="gap: 10px;">
+                    <button type="submit" class="btn-primary btn-full" id="btnSaveExpense" style="flex:1">Add to Expenses</button>
+                    <button type="button" class="btn-primary btn-full" id="btnSaveAndPay" style="flex:1; background: linear-gradient(135deg, #22c55e, #16a34a);">Add & Pay</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============ BUDGET MODAL ============ -->
+    <div class="modal-overlay" id="budgetModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Create Budget</h3>
+                <button class="modal-close" id="closeBudgetModal">✕</button>
+            </div>
+            <form id="budgetForm">
+                <div class="form-group">
+                    <label for="budgetName">Budget Name</label>
+                    <input type="text" id="budgetName" placeholder="e.g. Weekend Trip, Food Budget" required>
+                </div>
+                <div class="form-group">
+                    <label for="budgetAmount">Total Amount (₹)</label>
+                    <input type="number" id="budgetAmount" min="1" step="0.01" placeholder="1000" required>
+                </div>
+                <button type="submit" class="btn-primary btn-full">Create Budget</button>
             </form>
         </div>
     </div>

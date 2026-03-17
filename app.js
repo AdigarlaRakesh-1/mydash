@@ -1,10 +1,11 @@
 import { 
     db, 
     auth, 
+    signInWithPopup,
+    GoogleAuthProvider,
     googleProvider,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-    signInWithPopup,
     signOut,
     onAuthStateChanged
 } from './firebase-config.js';
@@ -25,6 +26,7 @@ const Store = {
     _tasks: [],
     _expenses: [],
     _notes: [],
+    _budgets: [],
 
     initLocalData(callback) {
         // We wait for Firebase Auth in init() before calling this
@@ -43,7 +45,7 @@ const Store = {
 
     _setupListeners(userId, callback) {
         let loadedCounts = 0;
-        const totalCollections = 3;
+        const totalCollections = 4;
 
         const checkDone = () => {
             loadedCounts++;
@@ -74,6 +76,13 @@ const Store = {
             this._notes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             if (loadedCounts < totalCollections) checkDone();
             if (typeof renderNotesList === 'function') renderNotesList();
+        });
+
+        // Budgets
+        onSnapshot(query(collection(db, "budgets"), where("userId", "==", userId)), (snapshot) => {
+            this._budgets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (loadedCounts < totalCollections) checkDone();
+            if (typeof renderBudgets === 'function') renderBudgets();
         });
     },
 
@@ -119,6 +128,7 @@ const Store = {
     getTasks() { return this._tasks; },
     getExpenses() { return this._expenses; },
     getNotes() { return this._notes; },
+    getBudgets() { return this._budgets; },
 
     async saveNote(note) {
         const userId = window.currentUser.uid;
@@ -150,6 +160,17 @@ const Store = {
 
     async deleteExpense(id) {
         await deleteDoc(doc(db, "expenses", id));
+    },
+
+    async saveBudget(budget) {
+        const userId = window.currentUser.uid;
+        const id = budget.id || generateId();
+        await setDoc(doc(db, "budgets", id), { ...budget, id, userId });
+        console.log("Budget saved to Firestore:", id);
+    },
+
+    async deleteBudget(id) {
+        await deleteDoc(doc(db, "budgets", id));
     }
 };
 
@@ -192,6 +213,8 @@ const EXPENSE_ICONS = {
     salary: '💰', food: '🍔', transport: '🚗', shopping: '🛍️', bills: '📄',
     entertainment: '🎬', health: '💊', education: '📚', other: '📦'
 };
+
+const DEFAULT_CATEGORIES = ['salary', 'food', 'transport', 'shopping', 'bills', 'entertainment', 'health', 'education', 'other'];
 
 const CAT_COLORS = {
     work: 'var(--accent)', personal: 'var(--green)',
@@ -275,6 +298,10 @@ const dom = {
     barChart: $('#barChart'),
     expenseList: $('#expenseList'),
 
+    // Budgets
+    budgetCards: $('#budgetCards'),
+    addBudgetBtn: $('#addBudgetBtn'),
+
     // Notes Manager
     noteList: $('#noteList'),
     btnNewNote: $('#btnNewNote'),
@@ -304,15 +331,31 @@ const dom = {
     expenseForm: $('#expenseForm'),
     expenseType: $('#expenseType'),
     expenseDesc: $('#expenseDesc'),
+    expensePaidTo: $('#expensePaidTo'),
     expenseAmount: $('#expenseAmount'),
     expenseCategory: $('#expenseCategory'),
     expenseDate: $('#expenseDate'),
+    expenseBudget: $('#expenseBudget'),
+    customCategoryGroup: $('#customCategoryGroup'),
+    customCategoryName: $('#customCategoryName'),
+    btnSaveAndPay: $('#btnSaveAndPay'),
+
+    // Budget Modal
+    budgetModal: $('#budgetModal'),
+    closeBudgetModal: $('#closeBudgetModal'),
+    budgetForm: $('#budgetForm'),
+    budgetName: $('#budgetName'),
+    budgetAmount: $('#budgetAmount'),
 };
 
 
 // ===== STATE =====
 let calYear, calMonth, selectedDate;
 let currentFilter = 'all';
+
+// Google Calendar events (fetched from API, not stored in Firestore)
+let _googleCalEvents = [];
+let _googleAccessToken = null;
 
 function initState() {
     const now = new Date();
@@ -382,6 +425,47 @@ function initTabs() {
 }
 
 
+// ===== GOOGLE CALENDAR =====
+async function fetchGoogleCalendarEvents() {
+    if (!_googleAccessToken) return;
+    try {
+        const timeMin = new Date(calYear, calMonth - 1, 1).toISOString();
+        const timeMax = new Date(calYear, calMonth + 2, 0).toISOString();
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=250`;
+        
+        const res = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${_googleAccessToken}` }
+        });
+        
+        if (!res.ok) {
+            console.warn('Google Calendar API error:', res.status);
+            return;
+        }
+        
+        const data = await res.json();
+        _googleCalEvents = (data.items || []).map(event => {
+            const start = event.start?.dateTime || event.start?.date || '';
+            const isAllDay = !event.start?.dateTime;
+            const dateObj = new Date(start);
+            const date = isAllDay ? start : toDateStr(dateObj);
+            const time = isAllDay ? '' : dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+            return {
+                id: event.id,
+                title: event.summary || '(No title)',
+                date: date,
+                time: time,
+                isAllDay: isAllDay,
+                source: 'google',
+            };
+        });
+        
+        console.log(`Fetched ${_googleCalEvents.length} Google Calendar events`);
+        if (typeof renderCalendar === 'function') renderCalendar();
+    } catch (err) {
+        console.warn('Failed to fetch Google Calendar events:', err);
+    }
+}
+
 // ===== CALENDAR =====
 function renderCalendar() {
     dom.calMonthTitle.textContent = `${MONTHS[calMonth]} ${calYear}`;
@@ -407,12 +491,13 @@ function renderCalendar() {
         const isToday = dateStr === today;
         const isSelected = dateStr === selectedDate;
         const dayTasks = tasks.filter(t => t.date === dateStr);
+        const dayGoogleEvents = _googleCalEvents.filter(e => e.date === dateStr);
 
         let dotsHtml = '';
-        if (dayTasks.length > 0) {
-            const uniqueCats = [...new Set(dayTasks.map(t => t.category))].slice(0, 3);
-            dotsHtml = `<div class="event-dots">${uniqueCats.map(c => `<div class="event-dot ${c}"></div>`).join('')}</div>`;
-        }
+        const taskDots = [...new Set(dayTasks.map(t => t.category))].slice(0, 3);
+        const allDots = taskDots.map(c => `<div class="event-dot ${c}"></div>`);
+        if (dayGoogleEvents.length > 0) allDots.push('<div class="event-dot gcal"></div>');
+        if (allDots.length > 0) dotsHtml = `<div class="event-dots">${allDots.slice(0, 4).join('')}</div>`;
 
         const classes = ['cal-cell'];
         if (isToday) classes.push('today');
@@ -449,10 +534,24 @@ function renderDayDetail() {
     dom.dayDetailTitle.textContent = formatDate(selectedDate);
 
     const tasks = Store.getTasks().filter(t => t.date === selectedDate);
-    if (tasks.length === 0) {
+    const gEvents = _googleCalEvents.filter(e => e.date === selectedDate);
+    
+    if (tasks.length === 0 && gEvents.length === 0) {
         dom.dayDetailContent.innerHTML = '<p class="empty-state">No events or tasks for this day.</p>';
     } else {
-        dom.dayDetailContent.innerHTML = tasks.map(t => `
+        let html = '';
+        // Google Calendar events first
+        html += gEvents.map(e => `
+            <div class="day-item gcal-event">
+                <div class="day-item-dot" style="background: var(--blue)"></div>
+                <div class="day-item-info">
+                    <div class="day-item-title">${escHtml(e.title)}</div>
+                    <div class="day-item-time">${e.time || 'All day'} · <span class="gcal-badge">Google Calendar</span></div>
+                </div>
+            </div>
+        `).join('');
+        // App tasks
+        html += tasks.map(t => `
             <div class="day-item">
                 <div class="day-item-dot" style="background:${CAT_COLORS[t.category] || 'var(--accent)'}"></div>
                 <div class="day-item-info">
@@ -461,6 +560,7 @@ function renderDayDetail() {
                 </div>
             </div>
         `).join('');
+        dom.dayDetailContent.innerHTML = html;
     }
 
     renderCalendarTasks();
@@ -640,6 +740,7 @@ function renderExpenses() {
         const idB = b.id || '';
         return dateB.localeCompare(dateA) || idB.localeCompare(idA);
     });
+    const budgets = Store.getBudgets();
     if (sorted.length === 0) {
         dom.expenseList.innerHTML = '<p class="empty-state">No transactions recorded. Click <strong>+ Add Expense</strong> to start tracking!</p>';
     } else {
@@ -647,17 +748,36 @@ function renderExpenses() {
             const isIncome = e.type === 'income';
             const sign = isIncome ? '+' : '-';
             const amountClass = isIncome ? 'income' : 'expense';
+            const paidToHtml = e.paidTo ? `<span class="expense-paid-to">→ ${escHtml(e.paidTo)}</span>` : '';
+            const linkedBudget = e.budgetId ? budgets.find(b => b.id === e.budgetId) : null;
+            const budgetTag = linkedBudget ? `<span class="expense-budget-tag">📋 ${escHtml(linkedBudget.name)}</span>` : '';
+            const paidBadge = e.paid ? '<span class="expense-paid-badge">✅ Paid</span>' : '';
+            const payBtn = (!isIncome && !e.paid) ? `<button class="expense-pay-btn" data-id="${e.id}" title="Pay via UPI">💸</button>` : '';
             return `
-            <div class="expense-item" data-id="${e.id}">
+            <div class="expense-item ${e.paid ? 'paid' : ''}" data-id="${e.id}">
                 <span class="expense-icon">${EXPENSE_ICONS[e.category] || '📦'}</span>
                 <div class="expense-body">
-                    <div class="expense-desc">${escHtml(e.description)}</div>
-                    <div class="expense-date">${formatDate(e.date)} · ${capitalize(e.category)}</div>
+                    <div class="expense-desc">${escHtml(e.description)} ${paidToHtml} ${paidBadge}</div>
+                    <div class="expense-date">${formatDate(e.date)} · ${capitalize(e.category)} ${budgetTag}</div>
                 </div>
                 <span class="expense-amount ${amountClass}">${sign}₹${e.amount.toLocaleString('en-IN')}</span>
+                ${payBtn}
                 <button class="expense-delete" data-id="${e.id}" title="Delete">🗑</button>
             </div>
         `}).join('');
+
+        // Pay button handlers
+        dom.expenseList.querySelectorAll('.expense-pay-btn').forEach(el => {
+            el.addEventListener('click', () => {
+                const exp = Store.getExpenses().find(e => e.id === el.dataset.id);
+                if (exp) {
+                    openUpiPay(exp);
+                    // Mark as paid
+                    exp.paid = true;
+                    Store.saveExpense(exp);
+                }
+            });
+        });
 
         dom.expenseList.querySelectorAll('.expense-delete').forEach(el => {
             el.addEventListener('click', () => {
@@ -666,10 +786,16 @@ function renderExpenses() {
             });
         });
     }
+
+    // Also render budgets
+    renderBudgets();
 }
 
 function renderBarChart(catTotals) {
-    const categories = ['food', 'transport', 'shopping', 'bills', 'entertainment', 'health', 'education', 'other'];
+    const defaultCats = ['food', 'transport', 'shopping', 'bills', 'entertainment', 'health', 'education', 'other'];
+    // Add custom categories that have spending
+    const customCats = Object.keys(catTotals).filter(c => !defaultCats.includes(c) && c !== 'salary');
+    const categories = [...defaultCats, ...customCats];
     const maxVal = Math.max(...categories.map(c => catTotals[c] || 0), 1);
 
     dom.barChart.innerHTML = categories.map(cat => {
@@ -678,13 +804,137 @@ function renderBarChart(catTotals) {
         return `
             <div class="bar-item">
                 <span class="bar-amount">${val > 0 ? '₹' + val.toLocaleString('en-IN') : ''}</span>
-                <div class="bar-fill ${cat}" style="height:${Math.max(pct, 3)}%"></div>
-                <span class="bar-label">${EXPENSE_ICONS[cat]}<br>${capitalize(cat)}</span>
+                <div class="bar-fill ${defaultCats.includes(cat) ? cat : 'other'}" style="height:${Math.max(pct, 3)}%"></div>
+                <span class="bar-label">${EXPENSE_ICONS[cat] || '🎯'}<br>${capitalize(cat)}</span>
             </div>
         `;
     }).join('');
 }
 
+
+// ===== BUDGETS =====
+function renderBudgets() {
+    const budgets = Store.getBudgets();
+    const expenses = Store.getExpenses();
+
+    if (budgets.length === 0) {
+        if (dom.budgetCards) dom.budgetCards.innerHTML = '<p class="empty-state">No budgets yet. Create one to track your spending!</p>';
+        return;
+    }
+
+    if (!dom.budgetCards) return;
+
+    dom.budgetCards.innerHTML = budgets.map(b => {
+        const linkedExpenses = expenses.filter(e => e.budgetId === b.id && e.type !== 'income');
+        const spent = linkedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const remaining = b.amount - spent;
+        const pct = Math.min((spent / b.amount) * 100, 100);
+        const isOver = spent > b.amount;
+        const barColor = isOver ? 'var(--red, #e74c3c)' : pct > 75 ? 'var(--orange, #f39c12)' : 'var(--green, #2ecc71)';
+
+        return `
+        <div class="budget-card-item">
+            <div class="budget-card-header">
+                <div class="budget-card-name">${escHtml(b.name)}</div>
+                <button class="budget-delete-btn" data-id="${b.id}" title="Delete budget">✕</button>
+            </div>
+            <div class="budget-amounts">
+                <span>Spent: <strong>₹${spent.toLocaleString('en-IN')}</strong></span>
+                <span>of <strong>₹${b.amount.toLocaleString('en-IN')}</strong></span>
+            </div>
+            <div class="budget-progress-bar">
+                <div class="budget-progress-fill" style="width:${pct}%; background:${barColor}"></div>
+            </div>
+            <div class="budget-remaining ${isOver ? 'over' : ''}">
+                ${isOver ? `Over by ₹${Math.abs(remaining).toLocaleString('en-IN')}` : `₹${remaining.toLocaleString('en-IN')} remaining`}
+            </div>
+            ${linkedExpenses.length > 0 ? `
+            <div class="budget-expense-list">
+                ${linkedExpenses.slice(0, 5).map(e => `
+                    <div class="budget-expense-mini">
+                        <span>${escHtml(e.description)}${e.paidTo ? ' → ' + escHtml(e.paidTo) : ''}</span>
+                        <span>-₹${e.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                `).join('')}
+                ${linkedExpenses.length > 5 ? `<div class="budget-expense-mini" style="color:var(--text-muted)">+${linkedExpenses.length - 5} more...</div>` : ''}
+            </div>` : ''}
+        </div>`;
+    }).join('');
+
+    // Delete budget handlers
+    dom.budgetCards.querySelectorAll('.budget-delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            Store.deleteBudget(btn.dataset.id);
+        });
+    });
+}
+
+function populateBudgetDropdown() {
+    const sel = dom.expenseBudget;
+    if (!sel) return;
+    const budgets = Store.getBudgets();
+    sel.innerHTML = '<option value="">— None —</option>' +
+        budgets.map(b => `<option value="${b.id}">${escHtml(b.name)} (₹${b.amount.toLocaleString('en-IN')})</option>`).join('');
+}
+
+function populateCategoryDropdown() {
+    const sel = dom.expenseCategory;
+    if (!sel) return;
+    // Collect custom categories from existing expenses
+    const expenses = Store.getExpenses();
+    const customCats = [...new Set(
+        expenses.map(e => e.category).filter(c => c && !DEFAULT_CATEGORIES.includes(c))
+    )].sort();
+    
+    // Rebuild dropdown: defaults + saved custom + "+ Custom" option
+    let html = `
+        <option value="salary">💰 Salary</option>
+        <option value="food">🍔 Food</option>
+        <option value="transport">🚗 Transport</option>
+        <option value="shopping">🛍️ Shopping</option>
+        <option value="bills">📄 Bills</option>
+        <option value="entertainment">🎬 Entertainment</option>
+        <option value="health">💊 Health</option>
+        <option value="education">📚 Education</option>
+        <option value="other">📦 Other</option>`;
+    
+    if (customCats.length > 0) {
+        html += customCats.map(c => 
+            `<option value="${escHtml(c)}">🎯 ${capitalize(c)}</option>`
+        ).join('');
+    }
+    html += '<option value="__custom__">✏️ + Custom</option>';
+    sel.innerHTML = html;
+    dom.customCategoryGroup.classList.add('hidden');
+}
+
+
+// ===== PAYMENT HELPERS =====
+function buildExpenseFromForm() {
+    const rawCategory = dom.expenseCategory.value;
+    const category = rawCategory === '__custom__'
+        ? (dom.customCategoryName.value.trim().toLowerCase() || 'other')
+        : rawCategory;
+    return {
+        id: generateId(),
+        type: dom.expenseType.value,
+        description: dom.expenseDesc.value.trim(),
+        paidTo: dom.expensePaidTo ? dom.expensePaidTo.value.trim() : '',
+        amount: parseFloat(dom.expenseAmount.value),
+        category: category,
+        date: dom.expenseDate.value,
+        budgetId: dom.expenseBudget ? dom.expenseBudget.value : '',
+        paid: false,
+    };
+}
+
+function openUpiPay(expense) {
+    if (!expense || expense.type === 'income' || !expense.amount || expense.amount <= 0) return;
+    const paidTo = expense.paidTo ? ` to ${expense.paidTo}` : '';
+    const note = encodeURIComponent(expense.description + paidTo);
+    const upiUrl = `upi://pay?am=${expense.amount}&cu=INR&tn=${note}`;
+    window.location.href = upiUrl;
+}
 
 // ===== DASHBOARD WIDGETS =====
 function initDashboardWidgets() {
@@ -766,6 +1016,8 @@ function initModals() {
     // Expense modal
     dom.addExpenseBtn.addEventListener('click', () => {
         dom.expenseDate.value = todayStr();
+        populateBudgetDropdown();
+        populateCategoryDropdown();
         dom.expenseModal.classList.add('show');
     });
     dom.closeExpenseModal.addEventListener('click', () => dom.expenseModal.classList.remove('show'));
@@ -773,20 +1025,61 @@ function initModals() {
         if (e.target === dom.expenseModal) dom.expenseModal.classList.remove('show');
     });
 
+    // Show/hide custom category input
+    dom.expenseCategory.addEventListener('change', () => {
+        if (dom.expenseCategory.value === '__custom__') {
+            dom.customCategoryGroup.classList.remove('hidden');
+            dom.customCategoryName.focus();
+        } else {
+            dom.customCategoryGroup.classList.add('hidden');
+        }
+    });
+
     dom.expenseForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const expense = {
-            id: generateId(),
-            type: dom.expenseType.value,
-            description: dom.expenseDesc.value.trim(),
-            amount: parseFloat(dom.expenseAmount.value),
-            category: dom.expenseCategory.value,
-            date: dom.expenseDate.value,
-        };
+        const expense = buildExpenseFromForm();
         Store.saveExpense(expense);
         dom.expenseModal.classList.remove('show');
         dom.expenseForm.reset();
+        dom.customCategoryGroup.classList.add('hidden');
         renderExpenses();
+    });
+
+    // Save & Pay button
+    dom.btnSaveAndPay.addEventListener('click', () => {
+        // Validate form manually
+        if (!dom.expenseForm.reportValidity()) return;
+        const expense = buildExpenseFromForm();
+        expense.paid = true;
+        Store.saveExpense(expense);
+        dom.expenseModal.classList.remove('show');
+        dom.expenseForm.reset();
+        dom.customCategoryGroup.classList.add('hidden');
+        renderExpenses();
+        openUpiPay(expense);
+    });
+
+    // Budget modal
+    dom.addBudgetBtn.addEventListener('click', () => {
+        dom.budgetModal.classList.add('show');
+    });
+    dom.closeBudgetModal.addEventListener('click', () => dom.budgetModal.classList.remove('show'));
+    dom.budgetModal.addEventListener('click', (e) => {
+        if (e.target === dom.budgetModal) dom.budgetModal.classList.remove('show');
+    });
+
+    dom.budgetForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const budget = {
+            id: generateId(),
+            name: dom.budgetName.value.trim(),
+            amount: parseFloat(dom.budgetAmount.value),
+            createdDate: todayStr(),
+        };
+        Store.saveBudget(budget);
+        dom.budgetModal.classList.remove('show');
+        dom.budgetForm.reset();
+        renderBudgets();
     });
 }
 
@@ -1074,20 +1367,6 @@ function showAuthError(message) {
     }
 }
 
-function setAuthLoading(loading, buttonId, originalText) {
-    const btn = document.getElementById(buttonId);
-    if (!btn) return;
-    if (loading) {
-        btn.disabled = true;
-        btn.textContent = 'Processing...';
-        btn.style.opacity = '0.7';
-    } else {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        btn.style.opacity = '1';
-    }
-}
-
 function showApp() {
     document.getElementById('authOverlay').style.display = 'none';
     document.querySelector('.app-layout').style.display = 'flex';
@@ -1101,91 +1380,108 @@ function hideApp() {
     document.getElementById('authOverlay').style.display = 'flex';
     document.querySelector('.app-layout').style.display = 'none';
     window.currentUser = null;
-    dashboardInitialized = false; // Reset so it re-inits on next login
+    dashboardInitialized = false;
+    // Show the login button (not spinner) when returning to auth
+    const loader = document.getElementById('authLoader');
+    const btnWrap = document.getElementById('authBtnWrap');
+    if (loader) loader.style.display = 'none';
+    if (btnWrap) btnWrap.classList.add('ready');
 }
 
-async function handleLogin(e) {
-    e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
-    const pass = document.getElementById('loginPassword').value;
-    
-    setAuthLoading(true, 'btnLoginSubmit', 'Login');
+async function handleAnonLogin() {
+    const btn = document.getElementById('btnAnonLogin');
+    if (btn) { btn.disabled = true; btn.textContent = 'Entering...'; }
     try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+        const userCredential = await signInAnonymously(auth);
         window.currentUser = userCredential.user;
-        showApp(); // Proactive transition for mobile
+        showApp();
     } catch (error) {
-        showAuthError("❌ Login failed: " + error.message);
-        setAuthLoading(false, 'btnLoginSubmit', 'Login');
-    }
-}
-
-async function handleSignup(e) {
-    e.preventDefault();
-    const email = document.getElementById('signupEmail').value;
-    const pass = document.getElementById('signupPassword').value;
-    
-    setAuthLoading(true, 'btnSignupSubmit', 'Sign Up');
-    try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-        window.currentUser = userCredential.user;
-        showApp(); // Proactive transition for mobile
-    } catch (error) {
-        showAuthError("❌ Signup failed: " + error.message);
-        setAuthLoading(false, 'btnSignupSubmit', 'Sign Up');
+        showAuthError('❌ Login failed: ' + error.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Continue as Guest'; }
     }
 }
 
 async function handleGoogleLogin() {
+    const btn = document.getElementById('btnGoogleLogin');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.7'; }
     try {
         const result = await signInWithPopup(auth, googleProvider);
+        // Extract Google OAuth access token for Calendar API
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential && credential.accessToken) {
+            _googleAccessToken = credential.accessToken;
+            // Fetch Google Calendar events in background
+            fetchGoogleCalendarEvents();
+        }
         window.currentUser = result.user;
-        showApp(); // Proactive transition for mobile
+        showApp();
     } catch (error) {
-        showAuthError("❌ Google Login failed: " + error.message);
+        if (error.code !== 'auth/popup-closed-by-user') {
+            showAuthError('❌ Google login failed: ' + error.message);
+        }
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
     }
+}
+
+let isSignUpMode = false;
+
+async function handleEmailAuth(e) {
+    e.preventDefault();
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    const btn = document.getElementById('btnEmailAuth');
+    if (btn) { btn.disabled = true; btn.textContent = isSignUpMode ? 'Creating...' : 'Signing in...'; }
+
+    try {
+        let result;
+        if (isSignUpMode) {
+            result = await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+            result = await signInWithEmailAndPassword(auth, email, password);
+        }
+        window.currentUser = result.user;
+        showApp();
+    } catch (error) {
+        let msg = error.message;
+        if (error.code === 'auth/user-not-found') msg = 'No account with this email. Try signing up!';
+        else if (error.code === 'auth/wrong-password') msg = 'Incorrect password.';
+        else if (error.code === 'auth/invalid-credential') msg = 'Invalid email or password.';
+        else if (error.code === 'auth/email-already-in-use') msg = 'Email already registered. Try signing in!';
+        else if (error.code === 'auth/weak-password') msg = 'Password must be at least 6 characters.';
+        showAuthError('❌ ' + msg);
+        if (btn) { btn.disabled = false; btn.textContent = isSignUpMode ? 'Sign Up' : 'Sign In'; }
+    }
+}
+
+function toggleAuthMode() {
+    isSignUpMode = !isSignUpMode;
+    document.getElementById('btnEmailAuth').textContent = isSignUpMode ? 'Sign Up' : 'Sign In';
+    document.getElementById('authToggleMsg').textContent = isSignUpMode ? 'Already have an account?' : "Don't have an account?";
+    document.getElementById('authToggleLink').textContent = isSignUpMode ? 'Sign In' : 'Sign Up';
+    // Clear status
+    const statusEl = document.getElementById('authStatus');
+    if (statusEl) statusEl.className = 'auth-status';
 }
 
 async function handleLogout() {
     try {
         await signOut(auth);
-        window.location.reload(); // Refresh to reset all states
+        window.location.reload();
     } catch (error) {
-        console.error("Logout error:", error);
+        console.error('Logout error:', error);
     }
 }
 
 function initAuthUI() {
-    const toSignup = document.getElementById('toSignup');
-    const toLogin = document.getElementById('toLogin');
-    const loginContainer = document.getElementById('loginFormContainer');
-    const signupContainer = document.getElementById('signupFormContainer');
-    const authSubtitle = document.getElementById('authSubtitle');
+    const btnGoogleLogin = document.getElementById('btnGoogleLogin');
+    if (btnGoogleLogin) btnGoogleLogin.addEventListener('click', handleGoogleLogin);
 
-    toSignup.addEventListener('click', (e) => {
-        e.preventDefault();
-        loginContainer.classList.add('hidden');
-        signupContainer.classList.remove('hidden');
-        authSubtitle.textContent = "Start your journey today.";
-    });
+    const emailForm = document.getElementById('emailAuthForm');
+    if (emailForm) emailForm.addEventListener('submit', handleEmailAuth);
 
-    toLogin.addEventListener('click', (e) => {
-        e.preventDefault();
-        signupContainer.classList.add('hidden');
-        loginContainer.classList.remove('hidden');
-        authSubtitle.textContent = "Manage your life, beautifully.";
-    });
+    const authToggle = document.getElementById('authToggleLink');
+    if (authToggle) authToggle.addEventListener('click', (e) => { e.preventDefault(); toggleAuthMode(); });
 
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
-    document.getElementById('signupForm').addEventListener('submit', handleSignup);
-    document.getElementById('btnGoogleLogin').addEventListener('click', handleGoogleLogin);
-    
-    // Set IDs for buttons to handle loading states
-    const loginSubmit = document.querySelector('#loginForm button[type="submit"]');
-    if (loginSubmit) loginSubmit.id = 'btnLoginSubmit';
-    const signupSubmit = document.querySelector('#signupForm button[type="submit"]');
-    if (signupSubmit) signupSubmit.id = 'btnSignupSubmit';
-    
     const btnLogout = document.getElementById('btnLogout');
     if (btnLogout) btnLogout.addEventListener('click', handleLogout);
 }
@@ -1197,17 +1493,21 @@ let dashboardInitialized = false;
 async function init() {
     initAuthUI();
 
-    // Re-check auth state reactively (Fallback and Persistence)
+    const loader = document.getElementById('authLoader');
+    const btnWrap = document.getElementById('authBtnWrap');
+
+    // React to auth state changes
     onAuthStateChanged(auth, async (user) => {
-        if (user && user.isAnonymous) {
-            await signOut(auth);
-            return;
-        }
+        // Firebase is ready — hide spinner
+        if (loader) loader.style.display = 'none';
 
         if (user) {
+            // Returning user (session persisted) — auto-login, skip auth screen
             window.currentUser = user;
             showApp(); 
         } else {
+            // New visitor — show the "Enter Dashboard" button
+            if (btnWrap) btnWrap.classList.add('ready');
             hideApp();
         }
     });
