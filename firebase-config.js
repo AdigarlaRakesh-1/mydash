@@ -27,7 +27,6 @@ const db = getFirestore(app);
 
 // Google Provider
 const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
 
 // Global Auth State Helper
 window.firebaseAuthLoaded = new Promise((resolve) => {

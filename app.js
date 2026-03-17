@@ -2,7 +2,6 @@ import {
     db, 
     auth, 
     signInWithPopup,
-    GoogleAuthProvider,
     googleProvider,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
@@ -353,10 +352,6 @@ const dom = {
 let calYear, calMonth, selectedDate;
 let currentFilter = 'all';
 
-// Google Calendar events (fetched from API, not stored in Firestore)
-let _googleCalEvents = [];
-let _googleAccessToken = null;
-
 function initState() {
     const now = new Date();
     calYear = now.getFullYear();
@@ -425,47 +420,6 @@ function initTabs() {
 }
 
 
-// ===== GOOGLE CALENDAR =====
-async function fetchGoogleCalendarEvents() {
-    if (!_googleAccessToken) return;
-    try {
-        const timeMin = new Date(calYear, calMonth - 1, 1).toISOString();
-        const timeMax = new Date(calYear, calMonth + 2, 0).toISOString();
-        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=250`;
-        
-        const res = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${_googleAccessToken}` }
-        });
-        
-        if (!res.ok) {
-            console.warn('Google Calendar API error:', res.status);
-            return;
-        }
-        
-        const data = await res.json();
-        _googleCalEvents = (data.items || []).map(event => {
-            const start = event.start?.dateTime || event.start?.date || '';
-            const isAllDay = !event.start?.dateTime;
-            const dateObj = new Date(start);
-            const date = isAllDay ? start : toDateStr(dateObj);
-            const time = isAllDay ? '' : dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-            return {
-                id: event.id,
-                title: event.summary || '(No title)',
-                date: date,
-                time: time,
-                isAllDay: isAllDay,
-                source: 'google',
-            };
-        });
-        
-        console.log(`Fetched ${_googleCalEvents.length} Google Calendar events`);
-        if (typeof renderCalendar === 'function') renderCalendar();
-    } catch (err) {
-        console.warn('Failed to fetch Google Calendar events:', err);
-    }
-}
-
 // ===== CALENDAR =====
 function renderCalendar() {
     dom.calMonthTitle.textContent = `${MONTHS[calMonth]} ${calYear}`;
@@ -491,13 +445,12 @@ function renderCalendar() {
         const isToday = dateStr === today;
         const isSelected = dateStr === selectedDate;
         const dayTasks = tasks.filter(t => t.date === dateStr);
-        const dayGoogleEvents = _googleCalEvents.filter(e => e.date === dateStr);
 
         let dotsHtml = '';
-        const taskDots = [...new Set(dayTasks.map(t => t.category))].slice(0, 3);
-        const allDots = taskDots.map(c => `<div class="event-dot ${c}"></div>`);
-        if (dayGoogleEvents.length > 0) allDots.push('<div class="event-dot gcal"></div>');
-        if (allDots.length > 0) dotsHtml = `<div class="event-dots">${allDots.slice(0, 4).join('')}</div>`;
+        if (dayTasks.length > 0) {
+            const uniqueCats = [...new Set(dayTasks.map(t => t.category))].slice(0, 3);
+            dotsHtml = `<div class="event-dots">${uniqueCats.map(c => `<div class="event-dot ${c}"></div>`).join('')}</div>`;
+        }
 
         const classes = ['cal-cell'];
         if (isToday) classes.push('today');
@@ -534,24 +487,11 @@ function renderDayDetail() {
     dom.dayDetailTitle.textContent = formatDate(selectedDate);
 
     const tasks = Store.getTasks().filter(t => t.date === selectedDate);
-    const gEvents = _googleCalEvents.filter(e => e.date === selectedDate);
     
-    if (tasks.length === 0 && gEvents.length === 0) {
+    if (tasks.length === 0) {
         dom.dayDetailContent.innerHTML = '<p class="empty-state">No events or tasks for this day.</p>';
     } else {
-        let html = '';
-        // Google Calendar events first
-        html += gEvents.map(e => `
-            <div class="day-item gcal-event">
-                <div class="day-item-dot" style="background: var(--blue)"></div>
-                <div class="day-item-info">
-                    <div class="day-item-title">${escHtml(e.title)}</div>
-                    <div class="day-item-time">${e.time || 'All day'} · <span class="gcal-badge">Google Calendar</span></div>
-                </div>
-            </div>
-        `).join('');
-        // App tasks
-        html += tasks.map(t => `
+        dom.dayDetailContent.innerHTML = tasks.map(t => `
             <div class="day-item">
                 <div class="day-item-dot" style="background:${CAT_COLORS[t.category] || 'var(--accent)'}"></div>
                 <div class="day-item-info">
@@ -560,7 +500,6 @@ function renderDayDetail() {
                 </div>
             </div>
         `).join('');
-        dom.dayDetailContent.innerHTML = html;
     }
 
     renderCalendarTasks();
@@ -1406,13 +1345,6 @@ async function handleGoogleLogin() {
     if (btn) { btn.disabled = true; btn.style.opacity = '0.7'; }
     try {
         const result = await signInWithPopup(auth, googleProvider);
-        // Extract Google OAuth access token for Calendar API
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        if (credential && credential.accessToken) {
-            _googleAccessToken = credential.accessToken;
-            // Fetch Google Calendar events in background
-            fetchGoogleCalendarEvents();
-        }
         window.currentUser = result.user;
         showApp();
     } catch (error) {
